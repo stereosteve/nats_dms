@@ -1,32 +1,54 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
+import { FormEvent, useEffect, useState } from 'react'
 import './App.css'
+import { ChatMsg, chatStream } from './provided'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [handle, setHandle] = useState('')
+  const [msg, setMsg] = useState('')
+  const [log, setLog] = useState<ChatMsg[]>(chatStream.history)
+
+  useEffect(() => {
+    return chatStream.addListener(() => {
+      setLog([...chatStream.history])
+    })
+  }, [])
+
+  async function sendMessage(e: FormEvent) {
+    e.preventDefault()
+    chatStream.pub({ handle, msg })
+    setMsg('')
+  }
 
   return (
     <div className="App">
-      <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src="/vite.svg" className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://reactjs.org" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+      <h2>Chat 4</h2>
+      <div className="chat-log">
+        {log.map((c, idx) => (
+          <div className="chat-msg" key={idx}>
+            <b>{c.handle}</b>: {c.msg}
+          </div>
+        ))}
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
+
+      <hr />
+
+      <form onSubmit={sendMessage}>
+        <input
+          type="text"
+          value={handle}
+          onChange={(e) => setHandle(e.target.value)}
+          placeholder="handle"
+          required
+        />
+        <input
+          type="text"
+          value={msg}
+          onChange={(e) => setMsg(e.target.value)}
+          placeholder="Say something..."
+          required
+        />
+        <button>Send</button>
+      </form>
     </div>
   )
 }

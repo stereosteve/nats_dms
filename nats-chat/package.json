@@ -6,9 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest"
   },
   "dependencies": {
+    "@noble/ed25519": "^1.6.1",
+    "@noble/secp256k1": "^1.6.3",
+    "micro-aes-gcm": "^0.3.3",
+    "micro-packed": "^0.2.0",
     "nats": "^2.7.1",
     "nats.ws": "^1.8.1",
     "react": "^18.2.0",
@@ -20,6 +25,7 @@
     "@vitejs/plugin-react": "^2.0.0",
     "typescript": "^4.6.4",
     "vite": "^3.0.0",
+    "vitest": "^0.19.1",
     "vite-node": "^0.19.0"
   }
 }

@@ -12,12 +12,14 @@
   "dependencies": {
     "@noble/ed25519": "^1.6.1",
     "@noble/secp256k1": "^1.6.3",
+    "@scure/base": "^1.1.1",
     "micro-aes-gcm": "^0.3.3",
     "micro-packed": "^0.2.0",
     "nats": "^2.7.1",
     "nats.ws": "^1.8.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.3.0"
   },
   "devDependencies": {
     "@types/react": "^18.0.15",

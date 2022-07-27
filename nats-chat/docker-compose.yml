@@ -1,0 +1,49 @@
+---
+version: "3"
+services:
+  n1:
+    image: nats
+    command: -c /nats-server.conf --name n1 --routes nats://n2:6222,nats://n3:6222
+    networks:
+      - nats
+    ports:
+      - 4221:4222
+      - 4241:4242
+      - 8221:8222
+    volumes:
+      - n1data:/data
+      - ./nats.conf:/nats-server.conf
+
+  n2:
+    image: nats
+    command: -c /nats-server.conf --name n2 --routes nats://n1:6222,nats://n3:6222
+    networks:
+      - nats
+    ports:
+      - 4222:4222
+      - 4242:4242
+      - 8222:8222
+    volumes:
+      - n2data:/data
+      - ./nats.conf:/nats-server.conf
+
+  n3:
+    image: nats
+    command: -c /nats-server.conf --name n3 --routes nats://n1:6222,nats://n2:6222
+    networks:
+      - nats
+    ports:
+      - 4223:4222
+      - 4243:4242
+      - 8223:8222
+    volumes:
+      - n3data:/data
+      - ./nats.conf:/nats-server.conf
+
+networks:
+  nats: {}
+
+volumes:
+  n1data:
+  n2data:
+  n3data:

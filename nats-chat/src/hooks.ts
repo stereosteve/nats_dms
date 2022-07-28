@@ -66,31 +66,34 @@ export function useChat() {
 
       // create jetstream sub here
       const js = nats.jetstream()
-      const opts = consumerOpts().deliverTo(createInbox())
-      opts.callback(async (err, m) => {
-        if (err) return console.error(err)
-        if (!m) return console.error('no message')
-        const got = await codec.decode<ChatMsg>(m.data)
-        if (got) {
-          const msg = got.data
-          setHandleMap((old) => ({ ...old, [msg.addr]: msg.handle }))
-          setLog((old) => [...old, got.data])
-          setChanList((old) => {
-            if (!msg.chan || old.includes(msg.chan)) return old
-            old.push(msg.chan)
-            old.sort()
-            return [...old]
-          })
+
+      async function consume() {
+        const opts = consumerOpts().deliverTo(createInbox())
+        const sub = await js.subscribe(SUBJECT, opts)
+        for await (const m of sub) {
+          const got = await codec.decode<ChatMsg>(m.data)
+          if (got) {
+            const msg = got.data
+            // console.log(msg)
+            setHandleMap((old) => ({ ...old, [msg.addr]: msg.handle }))
+            setLog((old) => [...old, got.data])
+            setChanList((old) => {
+              if (!msg.chan || old.includes(msg.chan)) return old
+              old.push(msg.chan)
+              old.sort()
+              return [...old]
+            })
+          }
+          // m.ack()
         }
-        if (m.info.pending === 0) {
-          setReady(true)
-        }
-      })
-      js.subscribe(SUBJECT, opts)
+      }
+
+      consume()
 
       setJs(js)
       setCodec(codec)
       setAddr(base58.encode(pub))
+      setReady(true)
     })
   }, [nats, privateKey])
 

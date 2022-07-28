@@ -68,6 +68,7 @@ button:focus-visible {
 nav a {
   display: block;
   padding: 5px;
+  white-space: nowrap;
 }
 nav a span {
   /* display: inline-block; */

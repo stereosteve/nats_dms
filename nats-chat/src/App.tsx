@@ -41,7 +41,7 @@ function Room() {
   const { addr, log, sendit, handleMap } = ChatClient.useContainer()
   const [handle, setHandle] = useLocalStorage<string>('nats_chat_handle', '')
   const [msg, setMsg] = useState('')
-  const chanAddrs = chan?.split(',').map((addr) => handleMap[addr])
+  const members = chan?.split(',').map((addr) => handleMap[addr])
 
   const visibleLog = useMemo(
     () => log.filter((msg) => msg.chan == chan),
@@ -75,9 +75,7 @@ function Room() {
   }
 
   return (
-    <div>
-      <h3>{chanAddrs ? chanAddrs?.join(', ') : 'Lobby'}</h3>
-
+    <div className="layout">
       <nav>
         <Link to="/">Lobby</Link>
         {Object.entries(chanMap).map(([chan, nicks]) => (
@@ -90,34 +88,35 @@ function Room() {
         <Link to="/dm">+ New Chat</Link>
       </nav>
 
-      <div className="chat-log">
-        {visibleLog.map((c, idx) => (
-          <div className="chat-msg" key={idx}>
-            <b title={c.addr}>{handleMap[c.addr]}</b>: {c.msg}
-          </div>
-        ))}
+      <div style={{ marginLeft: 20 }}>
+        <h2>{members ? members.join(', ') : 'Lobby'}</h2>
+        <div className="chat-log">
+          {visibleLog.map((c, idx) => (
+            <div className="chat-msg" key={idx}>
+              <b title={c.addr}>{handleMap[c.addr]}</b>: {c.msg}
+            </div>
+          ))}
+        </div>
+
+        <form onSubmit={sendMessage}>
+          <input
+            type="text"
+            value={handle}
+            onChange={(e) => setHandle(e.target.value)}
+            placeholder="handle"
+            required
+          />
+          <input
+            type="text"
+            value={msg}
+            onChange={(e) => setMsg(e.target.value)}
+            placeholder="Say something..."
+            required
+          />
+          <button>Send</button>
+        </form>
+        <div style={{ fontSize: 10, color: '#555' }}>{addr}</div>
       </div>
-
-      <hr />
-
-      <form onSubmit={sendMessage}>
-        <input
-          type="text"
-          value={handle}
-          onChange={(e) => setHandle(e.target.value)}
-          placeholder="handle"
-          required
-        />
-        <input
-          type="text"
-          value={msg}
-          onChange={(e) => setMsg(e.target.value)}
-          placeholder="Say something..."
-          required
-        />
-        <button>Send</button>
-      </form>
-      <div>You are: {addr}</div>
     </div>
   )
 }

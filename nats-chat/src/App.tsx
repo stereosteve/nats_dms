@@ -38,7 +38,7 @@ function Layout() {
 function Room() {
   // if we're in a channel
   const { chan } = useParams()
-  const { addr, log, sendit, handleMap } = ChatClient.useContainer()
+  const { addr, log, sendit, handleMap, ready } = ChatClient.useContainer()
   const [handle, setHandle] = useLocalStorage<string>('nats_chat_handle', '')
   const [msg, setMsg] = useState('')
   const members = chan?.split(',').map((addr) => handleMap[addr])
@@ -60,7 +60,7 @@ function Room() {
     }
   }
 
-  if (!addr) return null
+  if (!ready) return <div>loading</div>
 
   async function sendMessage(e: FormEvent) {
     e.preventDefault()
@@ -123,7 +123,9 @@ function Room() {
 
 function NewRoom() {
   const navigate = useNavigate()
-  const { addr, log, handleMap } = useChat()
+  const { addr, handleMap, ready } = ChatClient.useContainer()
+
+  if (!ready) return <div>loading</div>
 
   function handleSubmit(e: FormEvent) {
     if (!addr) return

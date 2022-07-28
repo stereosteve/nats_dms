@@ -15,6 +15,20 @@ export const ChatClient = createContainer(useChat)
 
 const SUBJECT = 'derpy.chat4'
 
+let natsServers = [
+  'ws://localhost:4241',
+  'ws://localhost:4242',
+  'ws://localhost:4243',
+]
+
+if (import.meta.env.PROD) {
+  natsServers = [
+    'wss://nats4241.audius2.stereosteve.com',
+    'wss://nats4242.audius2.stereosteve.com',
+    'wss://nats4243.audius2.stereosteve.com',
+  ]
+}
+
 export type ChatMsg = {
   addr: string
   handle: string
@@ -27,11 +41,7 @@ export function useNats() {
 
   useEffect(() => {
     connect({
-      servers: [
-        'ws://localhost:4241',
-        'ws://localhost:4242',
-        'ws://localhost:4243',
-      ],
+      servers: natsServers,
     }).then(setNats)
   }, [])
 
@@ -47,6 +57,7 @@ export function useChat() {
   const [addr, setAddr] = useState<string>()
   const [handleMap, setHandleMap] = useState<Record<string, string>>({})
   const [chanList, setChanList] = useState<string[]>([])
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     if (!nats || !privateKey) return
@@ -70,6 +81,9 @@ export function useChat() {
             old.sort()
             return [...old]
           })
+        }
+        if (m.info.pending === 0) {
+          setReady(true)
         }
       })
       js.subscribe(SUBJECT, opts)
@@ -95,7 +109,7 @@ export function useChat() {
     }
   }
 
-  return { addr, log, sendit, handleMap, chanList }
+  return { addr, log, sendit, handleMap, chanList, ready }
 }
 
 function usePrivateKey() {

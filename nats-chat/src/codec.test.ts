@@ -11,7 +11,7 @@ test('ed25519', async () => {
     message: 'I like dirt',
   }
 
-  const chantCodec = new ChantCodec(myPrivate)
+  const chantCodec = new ChantCodec(myPrivate, myPublic)
 
   // no options signs message
   {
@@ -26,7 +26,7 @@ test('ed25519', async () => {
 
   const friendPrivate = ed.utils.randomPrivateKey()
   const friendPublic = await ed.getPublicKey(friendPrivate)
-  const friendChantProto = new ChantCodec(friendPrivate)
+  const friendChantProto = new ChantCodec(friendPrivate, friendPublic)
 
   // shared secret
   {

@@ -21,12 +21,14 @@ const AsymEncrypted = P.struct({
 })
 
 export class ChantCodec {
+  publicKey: Uint8Array
   private privateKey: Uint8Array
   private keys: Uint8Array[] = []
   private jsonCodec = JSONCodec()
 
-  constructor(privateKey: Uint8Array) {
+  constructor(privateKey: Uint8Array, publicKey: Uint8Array) {
     this.privateKey = privateKey
+    this.publicKey = publicKey
     this.addKey(privateKey)
   }
 
@@ -46,7 +48,7 @@ export class ChantCodec {
     }
   }
 
-  async decode(bytes: Uint8Array) {
+  async decode<T>(bytes: Uint8Array) {
     // attempt to decrypt using any keys
     // a magic prefix could be used to make this cheaper
     let signed = bytes
@@ -68,7 +70,7 @@ export class ChantCodec {
         console.log('invalid signature')
         return
       }
-      const data = this.jsonCodec.decode(bytes)
+      const data = this.jsonCodec.decode(bytes) as T
       return {
         data,
         publicKey,

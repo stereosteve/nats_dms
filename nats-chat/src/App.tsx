@@ -49,7 +49,7 @@ function Layout() {
   const { loading, user, wallet, clearPrivateKey } = AuthAPI.useContainer()
   const { roomlist, ready } = ChatClient.useContainer()
 
-  if (loading || !ready) return <div>loading</div>
+  if (loading) return <div>loading</div>
   if (!wallet || !user) return <AuthenticationTitle />
 
   return (

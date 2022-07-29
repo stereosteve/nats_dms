@@ -183,11 +183,15 @@ export function useFetchUserByWallet(wallet: Key) {
       .then((res) => res.json())
       .then((r) => {
         const user = r.data as AudiusUser
-        user.avatar_url = user.creator_node_endpoint
-          .split(',')
-          .map(
-            (h: string) => `${h}/ipfs/${user.profile_picture_sizes}/150x150.jpg`
-          )[0]
+        if (user.profile_picture_sizes) {
+          user.avatar_url = user.creator_node_endpoint
+            .split(',')
+            .map(
+              (h: string) =>
+                `${h}/ipfs/${user.profile_picture_sizes}/150x150.jpg`
+            )[0]
+        }
+
         return user
       })
   )

@@ -12,6 +12,9 @@ import { forwardRef, useRef, useState } from 'react'
 export type AudiusUser = {
   handle: string
   name: string
+  creator_node_endpoint: string
+  profile_picture_sizes: string
+
   profile_picture?: {
     '150x150': string
   }

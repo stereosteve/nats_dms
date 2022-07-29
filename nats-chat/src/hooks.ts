@@ -1,5 +1,5 @@
 import { base58, base64 } from '@scure/base'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import * as ed from '@noble/ed25519'
 import { ChantCodec } from './codec'
 import {
@@ -12,11 +12,13 @@ import {
 import { createContainer } from 'unstated-next'
 import { useLocalStorage } from 'react-use'
 import { AudiusUser } from './UserSearch'
-import useSWR from 'swr'
+import useSWR, { Key } from 'swr'
+import { Address } from 'micro-eth-signer'
 
 export const ChatClient = createContainer(useChat)
+export const AuthAPI = createContainer(useAuth)
 
-const SUBJECT = 'derpy.chat4'
+const SUBJECT = 'derpy.chat8'
 
 let natsServers = [
   'ws://localhost:4241',
@@ -32,11 +34,16 @@ if (import.meta.env.PROD) {
   ]
 }
 
+// export const
+
 export type ChatMsg = {
-  addr: string
-  handle: string
+  timestamp: Date
   msg: string
   chan?: string
+
+  wallet: string
+  addr: string
+  handle: string
 }
 
 export function useNats() {
@@ -53,18 +60,20 @@ export function useNats() {
 
 export function useChat() {
   const nats = useNats()
-  const privateKey = usePrivateKey()
+  const { privateKey, wallet, user } = AuthAPI.useContainer()
   const [codec, setCodec] = useState<ChantCodec>()
   const [log, setLog] = useState<ChatMsg[]>([])
   const [js, setJs] = useState<JetStreamClient>()
-  const [addr, setAddr] = useState<string>()
-  const [handleMap, setHandleMap] = useState<Record<string, string>>({})
-  const [chanList, setChanList] = useState<string[]>([])
   const [ready, setReady] = useState(false)
+  const [addr, setAddr] = useState<string>()
 
   useEffect(() => {
     if (!nats || !privateKey) return
     ed.getPublicKey(privateKey).then((pub) => {
+      // TODO: get rid of ed25519 pubkey
+      // addr is base58 ed25519 pubkey
+      setAddr(base58.encode(pub))
+
       const codec = new ChantCodec(privateKey, pub)
 
       // create jetstream sub here
@@ -77,15 +86,7 @@ export function useChat() {
           const got = await codec.decode<ChatMsg>(m.data)
           if (got) {
             const msg = got.data
-            // console.log(msg)
-            setHandleMap((old) => ({ ...old, [msg.addr]: msg.handle }))
-            setLog((old) => [...old, got.data])
-            setChanList((old) => {
-              if (!msg.chan || old.includes(msg.chan)) return old
-              old.push(msg.chan)
-              old.sort()
-              return [...old]
-            })
+            setLog((old) => [...old, msg])
           }
           // m.ack()
         }
@@ -95,12 +96,23 @@ export function useChat() {
 
       setJs(js)
       setCodec(codec)
-      setAddr(base58.encode(pub))
       setReady(true)
     })
   }, [nats, privateKey])
 
-  async function sendit(msg: ChatMsg) {
+  async function sendit(msg: Partial<ChatMsg>) {
+    if (!wallet || !user) throw new Error(`cant sendit without user`)
+
+    msg.timestamp = new Date()
+
+    // TODO: demo hack
+    // really should sign messages with secp256k1 so we can recover public key
+    // and wallet address instead if putting it in message body where it could be arbitrarily set
+    // recovered wallet addr should be used for user lookup
+    msg.wallet = wallet
+    msg.addr = addr
+    msg.handle = user.handle
+
     if (msg.chan) {
       const pubkeys = msg.chan.split(',').map((b) => base58.decode(b))
       await Promise.all(
@@ -115,51 +127,83 @@ export function useChat() {
     }
   }
 
-  return { addr, log, sendit, handleMap, chanList, ready }
-}
+  type AddrAndWallet = {
+    addr: string
+    wallet: string
+  }
 
-function usePrivateKey() {
-  const [key, setKey] = useState<Uint8Array>()
-
-  useEffect(() => {
-    const name = 'nats_chat_private_key'
-    if (!localStorage.getItem(name)) {
-      localStorage.setItem(name, base64.encode(ed.utils.randomPrivateKey()))
+  // build up a map of addr: {addr, wallet}
+  // for all known people from visible messages
+  // this is required since we are using ed25519 keys still
+  // and it's not easy to get pubkey from eth wallet
+  const buddylist = useMemo(() => {
+    const byAddr: Record<string, AddrAndWallet> = {}
+    for (let msg of log) {
+      const { addr, wallet } = msg
+      byAddr[msg.addr] = {
+        addr,
+        wallet,
+      }
     }
-    setKey(base64.decode(localStorage.getItem(name)!))
-  }, [])
+    return byAddr
+  }, [log])
 
-  return key
+  // build up a map of chan: [wallet]
+  // this is a hack since chan names are still ed25519 pubkeys
+  // but we want to show happy users with wallets
+  const roomlist = useMemo(() => {
+    const chanSet = new Set(
+      log.map((c) => c.chan).filter(Boolean)
+    ) as Set<string>
+    const result: Record<string, string[]> = {}
+    for (let chan of chanSet) {
+      result[chan] = chan.split(',').map((addr) => buddylist[addr].wallet)
+    }
+    return result
+  }, [log])
+
+  return { log, sendit, buddylist, roomlist, ready, addr }
 }
 
 ///// --------------
 
-export const AuthAPI = createContainer(useAuth)
+// export const walletFetcher = (wallet: string) =>
 
-const walletFetcher = (wallet: string) =>
-  fetch(`https://discoveryprovider3.audius.co/users/account?wallet=${wallet}`)
-    .then((res) => res.json())
-    .then((r) => r.data)
+export function useFetchUserByWallet(wallet: Key) {
+  const { data: user } = useSWR<AudiusUser>(wallet, (wallet) =>
+    fetch(`https://discoveryprovider3.audius.co/users/account?wallet=${wallet}`)
+      .then((res) => res.json())
+      .then((r) => r.data)
+  )
 
-type SavedCreds = {
-  privateKey: Uint8Array
-  wallet: string
+  return { user }
 }
 
 function useAuth() {
-  const [creds, setCreds, clearCreds] =
-    useLocalStorage<SavedCreds>('audius_creds')
-
-  const { data: user } = useSWR<AudiusUser>(
-    creds && creds.wallet,
-    walletFetcher
+  const [privateKey, setPrivateKey, clearPrivateKey] = useLocalStorage(
+    'audius_creds',
+    undefined,
+    {
+      raw: false,
+      deserializer: base64.decode,
+      serializer: base64.encode,
+    }
   )
 
-  console.log(creds, user)
+  const wallet = useMemo(
+    () => (privateKey ? Address.fromPrivateKey(privateKey) : undefined),
+    [privateKey]
+  )
 
-  useEffect(() => {
-    if (!creds) return
-  }, [creds])
+  const { user } = useFetchUserByWallet(wallet)
+  const loading = wallet && !user
 
-  return { creds, setCreds, clearCreds, user }
+  return {
+    loading,
+    privateKey,
+    setPrivateKey,
+    clearPrivateKey,
+    wallet,
+    user,
+  }
 }

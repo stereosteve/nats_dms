@@ -1,7 +1,7 @@
 import * as P from 'micro-packed'
 import * as ed from '@noble/ed25519'
 import * as aes from 'micro-aes-gcm'
-import { JSONCodec } from 'nats.ws'
+import * as msgpack from '@msgpack/msgpack'
 
 type EncodeOpts = {
   encPublicKey?: Uint8Array
@@ -24,7 +24,7 @@ export class ChantCodec {
   publicKey: Uint8Array
   private privateKey: Uint8Array
   private keys: Uint8Array[] = []
-  private jsonCodec = JSONCodec()
+  // private jsonCodec = JSONCodec()
 
   constructor(privateKey: Uint8Array, publicKey: Uint8Array) {
     this.privateKey = privateKey
@@ -37,7 +37,7 @@ export class ChantCodec {
   }
 
   async encode(obj: unknown, opts?: EncodeOpts) {
-    const json = this.jsonCodec.encode(obj)
+    const json = msgpack.encode(obj)
     const signed = await this.sign(json, this.privateKey)
     if (opts?.encPublicKey) {
       return this.encryptAsym(signed, opts.encPublicKey)
@@ -70,7 +70,7 @@ export class ChantCodec {
         console.log('invalid signature')
         return
       }
-      const data = this.jsonCodec.decode(bytes) as T
+      const data = msgpack.decode(bytes) as T
       return {
         data,
         publicKey,

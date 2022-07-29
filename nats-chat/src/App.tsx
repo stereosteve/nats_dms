@@ -1,3 +1,4 @@
+import { Avatar } from '@mantine/core'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import {
   BrowserRouter,
@@ -8,9 +9,8 @@ import {
   useNavigate,
   Link,
 } from 'react-router-dom'
-import { useLocalStorage } from 'react-use'
 import './App.css'
-import { AuthAPI, ChatClient, useChat } from './hooks'
+import { AuthAPI, ChatClient, useChat, useFetchUserByWallet } from './hooks'
 import { AuthenticationTitle } from './Login'
 import { UserSearch } from './UserSearch'
 
@@ -31,18 +31,15 @@ export function Demo() {
 }
 
 function Layout() {
-  const { creds, user, clearCreds } = AuthAPI.useContainer()
+  const { loading, user, wallet, clearPrivateKey } = AuthAPI.useContainer()
 
-  if (!creds) {
-    return <AuthenticationTitle />
-  }
+  if (loading) return <div>loading</div>
+  if (!wallet || !user) return <AuthenticationTitle />
 
   return (
     <div>
-      {creds.wallet}
-      <hr />
-      {user?.handle}
-      <button onClick={clearCreds}>logout</button>
+      <WallyWall wallet={wallet} />
+      <button onClick={clearPrivateKey}>logout</button>
       <hr />
       <Outlet />
     </div>
@@ -52,35 +49,20 @@ function Layout() {
 function Room() {
   // if we're in a channel
   const { chan } = useParams()
-  const { addr, log, sendit, handleMap, ready } = ChatClient.useContainer()
-  const [handle, setHandle] = useLocalStorage<string>('nats_chat_handle', '')
+  const { log, sendit, roomlist, ready } = ChatClient.useContainer()
   const [msg, setMsg] = useState('')
-  const members = chan?.split(',').map((addr) => handleMap[addr])
+  const members = chan ? roomlist[chan] : undefined
 
   const visibleLog = useMemo(
     () => log.filter((msg) => msg.chan == chan),
     [log, chan]
   )
 
-  // glean chan list from visible messages
-  const chanMap: Record<string, string[]> = {}
-  for (let msg of log) {
-    let chan = msg.chan
-    if (chan) {
-      const nicks = chan
-        .split(',')
-        .map((k) => handleMap[k] || k.substring(0, 8))
-      chanMap[chan] = nicks
-    }
-  }
-
   if (!ready) return <div>loading</div>
 
   async function sendMessage(e: FormEvent) {
     e.preventDefault()
     const data = {
-      addr: addr!,
-      handle: handle!,
       msg,
       chan,
     }
@@ -92,10 +74,10 @@ function Room() {
     <div className="layout">
       <nav>
         <Link to="/">Lobby</Link>
-        {Object.entries(chanMap).map(([chan, nicks]) => (
-          <Link key={chan} to={`/dm/${chan}`}>
-            {nicks.map((nick) => (
-              <span key={nick}> {nick} </span>
+        {Object.entries(roomlist).map(([path, wallets]) => (
+          <Link key={path} to={`/dm/${path}`}>
+            {wallets.map((w) => (
+              <WallyWall key={w} wallet={w} />
             ))}
           </Link>
         ))}
@@ -103,23 +85,22 @@ function Room() {
       </nav>
 
       <div style={{ marginLeft: 20 }}>
-        <h2>{members ? members.join(', ') : 'Lobby'}</h2>
+        <div style={{ padding: 10, background: 'aliceblue' }}>
+          {members && members.map((m) => <WallyWall key={m} wallet={m} />)}
+          <h2>{!members && 'Lobby'}</h2>
+        </div>
         <div className="chat-log">
           {visibleLog.map((c, idx) => (
             <div className="chat-msg" key={idx}>
-              <b title={c.addr}>{handleMap[c.addr]}</b>: {c.msg}
+              <WallyWall wallet={c.wallet} />
+              <b>{c.msg}</b>
+              <br />
+              <small>{c.timestamp.toTimeString()}</small>
             </div>
           ))}
         </div>
 
         <form onSubmit={sendMessage}>
-          <input
-            type="text"
-            value={handle}
-            onChange={(e) => setHandle(e.target.value)}
-            placeholder="handle"
-            required
-          />
           <input
             type="text"
             value={msg}
@@ -129,7 +110,7 @@ function Room() {
           />
           <button>Send</button>
         </form>
-        <div style={{ fontSize: 10, color: '#555' }}>{addr}</div>
+        {/* <div style={{ fontSize: 10, color: '#555' }}>{wallet}</div> */}
       </div>
     </div>
   )
@@ -137,7 +118,7 @@ function Room() {
 
 function NewRoom() {
   const navigate = useNavigate()
-  const { addr, handleMap, ready } = ChatClient.useContainer()
+  const { buddylist, ready, addr } = ChatClient.useContainer()
 
   if (!ready) return <div>loading</div>
 
@@ -162,13 +143,33 @@ function NewRoom() {
         padding: 10,
       }}
     >
-      {Object.entries(handleMap).map(([pubkey, nick]) => (
-        <label style={{ display: 'block' }} key={pubkey}>
-          <input type="checkbox" name={pubkey} />
-          <b title={pubkey}>{nick}</b>
+      {Object.values(buddylist).map(({ wallet, addr }) => (
+        <label style={{ display: 'block' }} key={addr}>
+          <input type="checkbox" name={addr} />
+          <WallyWall wallet={wallet} />
         </label>
       ))}
       <button>chat</button>
     </form>
   )
 }
+
+// ----
+
+function WallyWall({ wallet }: { wallet: string }) {
+  const { user } = useFetchUserByWallet(wallet)
+  if (!user) return null
+  const avatarUrl = user.creator_node_endpoint
+    .split(',')
+    .map((h) => `${h}/ipfs/${user.profile_picture_sizes}/150x150.jpg`)[0]
+  return (
+    <div>
+      <Avatar src={avatarUrl} />
+      {user.handle}
+    </div>
+  )
+}
+
+/*
+https://creatornode2.audius.co/ipfs/QmUSEXrrgm8vZf2Y3VMR15vtn5SPdZAYzzFT1aJNqmCeNH/150x150.jpg
+*/

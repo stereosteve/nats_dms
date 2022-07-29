@@ -16,7 +16,7 @@ import { HedgehogLite } from './hedgehog'
 import { AuthAPI } from './hooks'
 
 export function AuthenticationTitle() {
-  const { setCreds } = AuthAPI.useContainer()
+  const { setPrivateKey } = AuthAPI.useContainer()
 
   const form = useForm({
     initialValues: {
@@ -33,8 +33,8 @@ export function AuthenticationTitle() {
     const hedgehog = new HedgehogLite()
     try {
       const hdkey = await hedgehog.login(email, password)
-      const addr = Address.fromPrivateKey(hdkey.privateKey!)
-      setCreds({ privateKey: hdkey.privateKey!, wallet: addr })
+      // const addr = Address.fromPrivateKey(hdkey.privateKey!)
+      setPrivateKey(hdkey.privateKey!)
     } catch (e) {
       console.log('login failed', e)
     }

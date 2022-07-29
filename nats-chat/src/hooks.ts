@@ -11,14 +11,13 @@ import {
 } from 'nats.ws'
 import { createContainer } from 'unstated-next'
 import { useLocalStorage } from 'react-use'
-import { AudiusUser } from './UserSearch'
 import useSWR, { Key } from 'swr'
 import { Address } from 'micro-eth-signer'
 
 export const ChatClient = createContainer(useChat)
 export const AuthAPI = createContainer(useAuth)
 
-const SUBJECT = 'derpy.chat8'
+const SUBJECT = 'derpy.chat9'
 
 let natsServers = [
   'ws://localhost:4241',
@@ -43,7 +42,6 @@ export type ChatMsg = {
 
   wallet: string
   addr: string
-  handle: string
 }
 
 export function useNats() {
@@ -60,7 +58,7 @@ export function useNats() {
 
 export function useChat() {
   const nats = useNats()
-  const { privateKey, wallet, user } = AuthAPI.useContainer()
+  const { privateKey, wallet } = AuthAPI.useContainer()
   const [codec, setCodec] = useState<ChantCodec>()
   const [log, setLog] = useState<ChatMsg[]>([])
   const [js, setJs] = useState<JetStreamClient>()
@@ -101,7 +99,7 @@ export function useChat() {
   }, [nats, privateKey])
 
   async function sendit(msg: Partial<ChatMsg>) {
-    if (!wallet || !user) throw new Error(`cant sendit without user`)
+    if (!wallet) throw new Error(`cant sendit without wallet`)
 
     msg.timestamp = new Date()
 
@@ -111,7 +109,6 @@ export function useChat() {
     // recovered wallet addr should be used for user lookup
     msg.wallet = wallet
     msg.addr = addr
-    msg.handle = user.handle
 
     if (msg.chan) {
       const pubkeys = msg.chan.split(',').map((b) => base58.decode(b))
@@ -145,6 +142,7 @@ export function useChat() {
         wallet,
       }
     }
+
     return byAddr
   }, [log])
 
@@ -167,13 +165,31 @@ export function useChat() {
 
 ///// --------------
 
-// export const walletFetcher = (wallet: string) =>
+export type AudiusUser = {
+  handle: string
+  name: string
+  creator_node_endpoint: string
+  profile_picture_sizes: string
+  avatar_url: string
+
+  profile_picture?: {
+    '150x150': string
+  }
+}
 
 export function useFetchUserByWallet(wallet: Key) {
   const { data: user } = useSWR<AudiusUser>(wallet, (wallet) =>
     fetch(`https://discoveryprovider3.audius.co/users/account?wallet=${wallet}`)
       .then((res) => res.json())
-      .then((r) => r.data)
+      .then((r) => {
+        const user = r.data as AudiusUser
+        user.avatar_url = user.creator_node_endpoint
+          .split(',')
+          .map(
+            (h: string) => `${h}/ipfs/${user.profile_picture_sizes}/150x150.jpg`
+          )[0]
+        return user
+      })
   )
 
   return { user }

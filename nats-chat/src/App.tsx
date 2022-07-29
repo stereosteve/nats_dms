@@ -1,4 +1,12 @@
-import { Avatar } from '@mantine/core'
+import {
+  AppShell,
+  Avatar,
+  Group,
+  Header,
+  Input,
+  Navbar,
+  Text,
+} from '@mantine/core'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import {
   BrowserRouter,
@@ -8,9 +16,16 @@ import {
   useParams,
   useNavigate,
   Link,
+  NavLink,
 } from 'react-router-dom'
 import './App.css'
-import { AuthAPI, ChatClient, useChat, useFetchUserByWallet } from './hooks'
+import {
+  AuthAPI,
+  ChatClient,
+  ChatMsg,
+  useChat,
+  useFetchUserByWallet,
+} from './hooks'
 import { AuthenticationTitle } from './Login'
 import { UserSearch } from './UserSearch'
 
@@ -32,17 +47,44 @@ export function Demo() {
 
 function Layout() {
   const { loading, user, wallet, clearPrivateKey } = AuthAPI.useContainer()
+  const { roomlist, ready } = ChatClient.useContainer()
 
-  if (loading) return <div>loading</div>
+  if (loading || !ready) return <div>loading</div>
   if (!wallet || !user) return <AuthenticationTitle />
 
   return (
-    <div>
-      <WallyWall wallet={wallet} />
-      <button onClick={clearPrivateKey}>logout</button>
-      <hr />
+    <AppShell
+      padding="md"
+      navbar={
+        <Navbar width={{ base: 200 }} height={500} p="xs">
+          <Navbar.Section grow className="leftnav">
+            <NavLink to="/">Lobby</NavLink>
+            {Object.entries(roomlist).map(([path, wallets]) => (
+              <NavLink key={path} to={`/dm/${path}`}>
+                <Group>
+                  {wallets.map((w) => (
+                    <UserFace key={w} wallet={w} />
+                  ))}
+                </Group>
+              </NavLink>
+            ))}
+            <NavLink to="/dm">+ New Chat</NavLink>
+          </Navbar.Section>
+
+          <Navbar.Section>
+            <UserFace wallet={wallet} />
+            <button onClick={clearPrivateKey}>logout</button>
+          </Navbar.Section>
+        </Navbar>
+      }
+      header={
+        <Header height={50} p="xs">
+          <Text>Audius Chat</Text>
+        </Header>
+      }
+    >
       <Outlet />
-    </div>
+    </AppShell>
   )
 }
 
@@ -71,47 +113,29 @@ function Room() {
   }
 
   return (
-    <div className="layout">
-      <nav>
-        <Link to="/">Lobby</Link>
-        {Object.entries(roomlist).map(([path, wallets]) => (
-          <Link key={path} to={`/dm/${path}`}>
-            {wallets.map((w) => (
-              <WallyWall key={w} wallet={w} />
-            ))}
-          </Link>
+    <div>
+      {/* <div style={{ padding: 10, background: 'aliceblue' }}>
+        {members && members.map((m) => <WallyWall key={m} wallet={m} />)}
+        <h2>{!members && 'Lobby'}</h2>
+      </div> */}
+
+      <div>
+        {visibleLog.map((msg, idx) => (
+          <ChatRow msg={msg} key={idx} />
         ))}
-        <Link to="/dm">+ New Chat</Link>
-      </nav>
-
-      <div style={{ marginLeft: 20 }}>
-        <div style={{ padding: 10, background: 'aliceblue' }}>
-          {members && members.map((m) => <WallyWall key={m} wallet={m} />)}
-          <h2>{!members && 'Lobby'}</h2>
-        </div>
-        <div className="chat-log">
-          {visibleLog.map((c, idx) => (
-            <div className="chat-msg" key={idx}>
-              <WallyWall wallet={c.wallet} />
-              <b>{c.msg}</b>
-              <br />
-              <small>{c.timestamp.toTimeString()}</small>
-            </div>
-          ))}
-        </div>
-
-        <form onSubmit={sendMessage}>
-          <input
-            type="text"
-            value={msg}
-            onChange={(e) => setMsg(e.target.value)}
-            placeholder="Say something..."
-            required
-          />
-          <button>Send</button>
-        </form>
-        {/* <div style={{ fontSize: 10, color: '#555' }}>{wallet}</div> */}
       </div>
+
+      <form onSubmit={sendMessage} style={{ display: 'flex' }}>
+        <Input
+          type="text"
+          value={msg}
+          onChange={(e: any) => setMsg(e.target.value)}
+          placeholder="Say something..."
+          required
+        />
+        <button>Send</button>
+      </form>
+      {/* <div style={{ fontSize: 10, color: '#555' }}>{wallet}</div> */}
     </div>
   )
 }
@@ -134,21 +158,16 @@ function NewRoom() {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      style={{
-        maxWidth: 800,
-        margin: '50px auto',
-        border: '1px solid #333',
-        padding: 10,
-      }}
-    >
+    <form onSubmit={handleSubmit}>
       {Object.values(buddylist).map(({ wallet, addr }) => (
         <label style={{ display: 'block' }} key={addr}>
-          <input type="checkbox" name={addr} />
-          <WallyWall wallet={wallet} />
+          <Group>
+            <input type="checkbox" name={addr} />
+            <UserFaceAndName wallet={wallet} />
+          </Group>
         </label>
       ))}
+      <br />
       <button>chat</button>
     </form>
   )
@@ -156,17 +175,44 @@ function NewRoom() {
 
 // ----
 
-function WallyWall({ wallet }: { wallet: string }) {
-  const { user } = useFetchUserByWallet(wallet)
+function ChatRow({ msg }: { msg: ChatMsg }) {
+  const { user } = useFetchUserByWallet(msg.wallet)
   if (!user) return null
-  const avatarUrl = user.creator_node_endpoint
-    .split(',')
-    .map((h) => `${h}/ipfs/${user.profile_picture_sizes}/150x150.jpg`)[0]
   return (
     <div>
-      <Avatar src={avatarUrl} />
-      {user.handle}
+      <Group style={{ alignItems: 'flex-start', marginBottom: 20 }}>
+        <Avatar src={user.avatar_url} />
+
+        <div style={{ flex: 1 }}>
+          <Text size="sm" weight={500} title={user.handle}>
+            {user.name}
+
+            <small style={{ color: '#ccc', marginLeft: 10 }}>
+              {msg.timestamp.toLocaleTimeString()}
+            </small>
+          </Text>
+
+          <Text>{msg.msg}</Text>
+        </div>
+      </Group>
     </div>
+  )
+}
+
+function UserFace({ wallet }: { wallet: string }) {
+  const { user } = useFetchUserByWallet(wallet)
+  if (!user) return null
+  return <Avatar src={user.avatar_url} />
+}
+
+function UserFaceAndName({ wallet }: { wallet: string }) {
+  const { user } = useFetchUserByWallet(wallet)
+  if (!user) return null
+  return (
+    <Group>
+      <Avatar src={user.avatar_url} />
+      <Text>{user.name}</Text>
+    </Group>
   )
 }
 

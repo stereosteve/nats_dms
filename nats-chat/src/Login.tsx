@@ -11,7 +11,6 @@ import {
   Button,
 } from '@mantine/core'
 import { useForm } from '@mantine/form'
-import { Address } from 'micro-eth-signer'
 import { HedgehogLite } from './hedgehog'
 import { AuthAPI } from './hooks'
 

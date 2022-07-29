@@ -10,6 +10,9 @@ import {
   NatsConnection,
 } from 'nats.ws'
 import { createContainer } from 'unstated-next'
+import { useLocalStorage } from 'react-use'
+import { AudiusUser } from './UserSearch'
+import useSWR from 'swr'
 
 export const ChatClient = createContainer(useChat)
 
@@ -127,4 +130,36 @@ function usePrivateKey() {
   }, [])
 
   return key
+}
+
+///// --------------
+
+export const AuthAPI = createContainer(useAuth)
+
+const walletFetcher = (wallet: string) =>
+  fetch(`https://discoveryprovider3.audius.co/users/account?wallet=${wallet}`)
+    .then((res) => res.json())
+    .then((r) => r.data)
+
+type SavedCreds = {
+  privateKey: Uint8Array
+  wallet: string
+}
+
+function useAuth() {
+  const [creds, setCreds, clearCreds] =
+    useLocalStorage<SavedCreds>('audius_creds')
+
+  const { data: user } = useSWR<AudiusUser>(
+    creds && creds.wallet,
+    walletFetcher
+  )
+
+  console.log(creds, user)
+
+  useEffect(() => {
+    if (!creds) return
+  }, [creds])
+
+  return { creds, setCreds, clearCreds, user }
 }

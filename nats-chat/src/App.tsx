@@ -10,7 +10,9 @@ import {
 } from 'react-router-dom'
 import { useLocalStorage } from 'react-use'
 import './App.css'
-import { ChatClient, useChat } from './hooks'
+import { AuthAPI, ChatClient, useChat } from './hooks'
+import { AuthenticationTitle } from './Login'
+import { UserSearch } from './UserSearch'
 
 export function Demo() {
   return (
@@ -20,6 +22,8 @@ export function Demo() {
           <Route path="/" element={<Room />} />
           <Route path="/dm" element={<NewRoom />} />
           <Route path="/dm/:chan" element={<Room />} />
+          <Route path="/who" element={<UserSearch />} />
+          <Route path="/login" element={<AuthenticationTitle />} />
         </Route>
       </Routes>
     </BrowserRouter>
@@ -27,9 +31,19 @@ export function Demo() {
 }
 
 function Layout() {
+  const { creds, user, clearCreds } = AuthAPI.useContainer()
+
+  if (!creds) {
+    return <AuthenticationTitle />
+  }
+
   return (
     <div>
-      <nav></nav>
+      {creds.wallet}
+      <hr />
+      {user?.handle}
+      <button onClick={clearCreds}>logout</button>
+      <hr />
       <Outlet />
     </div>
   )

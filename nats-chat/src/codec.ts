@@ -1,5 +1,5 @@
 import * as P from 'micro-packed'
-import * as ed from '@noble/ed25519'
+import * as secp from '@noble/secp256k1'
 import * as aes from 'micro-aes-gcm'
 import * as msgpack from '@msgpack/msgpack'
 
@@ -24,7 +24,6 @@ export class ChantCodec {
   publicKey: Uint8Array
   private privateKey: Uint8Array
   private keys: Uint8Array[] = []
-  // private jsonCodec = JSONCodec()
 
   constructor(privateKey: Uint8Array, publicKey: Uint8Array) {
     this.privateKey = privateKey
@@ -79,36 +78,50 @@ export class ChantCodec {
   }
 
   private async sign(bytes: Uint8Array, privateKey: Uint8Array) {
-    const publicKey = await ed.getPublicKey(privateKey)
-    const signature = await ed.sign(bytes, privateKey)
-    return SignedPayload.encode({ bytes, publicKey, signature })
+    const messageHash = await secp.utils.sha256(bytes)
+    const [signature, recovery] = await secp.sign(messageHash, privateKey, {
+      recovered: true,
+      extraEntropy: true,
+    })
+    const signed = msgpack.encode([bytes, messageHash, signature, recovery])
+    return signed
   }
 
-  private async unsign(bytes: Uint8Array) {
-    const struct = SignedPayload.decode(bytes)
-    const valid = await ed.verify(
-      struct.signature,
-      struct.bytes,
-      struct.publicKey
+  private async unsign(signedBytes: Uint8Array) {
+    const [bytes, messageHash, signature, recovery] = msgpack.decode(
+      signedBytes
+    ) as Uint8Array[]
+
+    const publicKey = secp.recoverPublicKey(
+      messageHash,
+      signature,
+      recovery as any
     )
-    return { ...struct, valid }
+    const valid = secp.verify(signature, messageHash, publicKey)
+
+    // const valid = await ed.verify(signature, bytes, publicKey)
+    return { bytes, publicKey, signature, valid }
   }
 
   private async encryptAsym(bytes: Uint8Array, publicKey: Uint8Array) {
-    const ephemPrivateKey = ed.utils.randomPrivateKey()
-    const ephemPublicKey = await ed.getPublicKey(ephemPrivateKey)
-    const shared = await ed.getSharedSecret(ephemPrivateKey, publicKey)
+    const ephemPrivateKey = secp.utils.randomPrivateKey()
+    const ephemPublicKey = secp.getPublicKey(ephemPrivateKey)
+    // TODO: slice is a bit sus
+    const shared = secp
+      .getSharedSecret(ephemPrivateKey, publicKey, true)
+      .slice(0, 32)
+    console.log(shared)
     const ciphertext = await aes.encrypt(shared, bytes)
-    return AsymEncrypted.encode({
-      ephemPublicKey,
-      ciphertext,
-    })
+    return msgpack.encode([ephemPublicKey, ciphertext])
   }
 
   private async decryptAsym(bytes: Uint8Array, privateKey: Uint8Array) {
-    const struct = AsymEncrypted.decode(bytes)
-    const shared = await ed.getSharedSecret(privateKey, struct.ephemPublicKey) // len: 32
-    const clear = await aes.decrypt(shared, struct.ciphertext)
+    const [ephemPublicKey, ciphertext] = msgpack.decode(bytes) as Uint8Array[]
+    // TODO: slice is a bit sus
+    const shared = secp
+      .getSharedSecret(privateKey, ephemPublicKey, true)
+      .slice(0, 32) // len: 32
+    const clear = await aes.decrypt(shared, ciphertext)
     return clear
   }
 }

@@ -1,7 +1,7 @@
 import { base58, base64 } from '@scure/base'
 import { useState, useEffect, useMemo } from 'react'
-import * as ed from '@noble/ed25519'
 import { ChantCodec } from './codec'
+import * as secp from '@noble/secp256k1'
 import {
   connect,
   consumerOpts,
@@ -17,7 +17,7 @@ import { Address } from 'micro-eth-signer'
 export const ChatClient = createContainer(useChat)
 export const AuthAPI = createContainer(useAuth)
 
-const SUBJECT = 'derpy.chat9'
+const SUBJECT = 'derpy.chat10'
 
 let natsServers = [
   'ws://localhost:4241',
@@ -67,48 +67,44 @@ export function useChat() {
 
   useEffect(() => {
     if (!nats || !privateKey) return
-    ed.getPublicKey(privateKey).then((pub) => {
-      // TODO: get rid of ed25519 pubkey
-      // addr is base58 ed25519 pubkey
-      setAddr(base58.encode(pub))
+    const pub = secp.getPublicKey(privateKey)
+    setAddr(base58.encode(pub))
 
-      const codec = new ChantCodec(privateKey, pub)
+    const codec = new ChantCodec(privateKey, pub)
 
-      // create jetstream sub here
-      const js = nats.jetstream()
+    // create jetstream sub here
+    const js = nats.jetstream()
 
-      async function consume() {
-        const opts = consumerOpts().deliverTo(createInbox())
-        const sub = await js.subscribe(SUBJECT, opts)
-        for await (const m of sub) {
-          const got = await codec.decode<ChatMsg>(m.data)
-          if (got) {
-            const msg = got.data
-            setLog((old) => [...old, msg])
-          }
-          // m.ack()
+    async function consume() {
+      const opts = consumerOpts().deliverTo(createInbox())
+      const sub = await js.subscribe(SUBJECT, opts)
+      for await (const m of sub) {
+        const got = await codec.decode<ChatMsg>(m.data)
+        if (got) {
+          const msg = got.data
+          // rewrite publicKey and wallet based on "real" values
+          // from signature key recover...
+          // todo: do this in codec?
+          // todo: separate schema for outgoing and incoming message
+          msg.addr = base58.encode(got.publicKey)
+          msg.wallet = Address.fromPublicKey(got.publicKey)
+          setLog((old) => [...old, msg])
         }
+        // m.ack()
       }
+    }
 
-      consume()
+    consume()
 
-      setJs(js)
-      setCodec(codec)
-      setReady(true)
-    })
+    setJs(js)
+    setCodec(codec)
+    setReady(true)
   }, [nats, privateKey])
 
   async function sendit(msg: Partial<ChatMsg>) {
     if (!wallet) throw new Error(`cant sendit without wallet`)
 
     msg.timestamp = new Date()
-
-    // TODO: demo hack
-    // really should sign messages with secp256k1 so we can recover public key
-    // and wallet address instead if putting it in message body where it could be arbitrarily set
-    // recovered wallet addr should be used for user lookup
-    msg.wallet = wallet
-    msg.addr = addr
 
     if (msg.chan) {
       const pubkeys = msg.chan.split(',').map((b) => base58.decode(b))

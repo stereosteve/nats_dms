@@ -1,10 +1,11 @@
 import { assert, expect, test } from 'vitest'
-import * as ed from '@noble/ed25519'
+import * as secp from '@noble/secp256k1'
+
 import { ChantCodec } from './codec'
 
-test('ed25519', async () => {
-  const myPrivate = ed.utils.randomPrivateKey()
-  const myPublic = await ed.getPublicKey(myPrivate)
+test('codec', async () => {
+  const myPrivate = secp.utils.randomPrivateKey()
+  const myPublic = secp.getPublicKey(myPrivate)
 
   const message = {
     handle: 'steve',
@@ -24,13 +25,13 @@ test('ed25519', async () => {
     expect(data).toStrictEqual(message)
   }
 
-  const friendPrivate = ed.utils.randomPrivateKey()
-  const friendPublic = await ed.getPublicKey(friendPrivate)
+  const friendPrivate = secp.utils.randomPrivateKey()
+  const friendPublic = secp.getPublicKey(friendPrivate)
   const friendChantProto = new ChantCodec(friendPrivate, friendPublic)
 
   // shared secret
   {
-    const shared = ed.utils.randomBytes()
+    const shared = secp.utils.randomBytes()
     const encrypted = await chantCodec.encode(message, {
       symKey: shared,
     })

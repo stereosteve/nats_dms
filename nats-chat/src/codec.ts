@@ -18,9 +18,9 @@ export class ChantCodec {
   private privateKey: Uint8Array
   private keys: Uint8Array[] = []
 
-  constructor(privateKey: Uint8Array, publicKey: Uint8Array) {
+  constructor(privateKey: Uint8Array) {
     this.privateKey = privateKey
-    this.publicKey = publicKey
+    this.publicKey = secp.getPublicKey(privateKey)
     this.addKey(privateKey)
   }
 

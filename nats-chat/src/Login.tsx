@@ -12,7 +12,7 @@ import {
 } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { HedgehogLite } from './hedgehog'
-import { AuthAPI } from './hooks'
+import { AuthAPI, ChatClient } from './hooks'
 
 export function AuthenticationTitle() {
   const { setPrivateKey } = AuthAPI.useContainer()
@@ -32,7 +32,6 @@ export function AuthenticationTitle() {
     const hedgehog = new HedgehogLite()
     try {
       const hdkey = await hedgehog.login(email, password)
-      // const addr = Address.fromPrivateKey(hdkey.privateKey!)
       setPrivateKey(hdkey.privateKey!)
     } catch (e) {
       console.log('login failed', e)

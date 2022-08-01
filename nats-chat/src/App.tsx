@@ -27,6 +27,7 @@ import {
   useFetchUserByWallet,
 } from './hooks'
 import { AuthenticationTitle } from './Login'
+import { TrackSearch } from './TrackSearch'
 import { UserSearch } from './UserSearch'
 
 export function Demo() {
@@ -38,6 +39,7 @@ export function Demo() {
           <Route path="/dm" element={<NewRoom />} />
           <Route path="/dm/:chan" element={<Room />} />
           <Route path="/who" element={<UserSearch />} />
+          <Route path="/track" element={<TrackSearch />} />
           <Route path="/login" element={<AuthenticationTitle />} />
         </Route>
       </Routes>
@@ -159,7 +161,7 @@ function NewRoom() {
 
   return (
     <form onSubmit={handleSubmit}>
-      {Object.values(buddylist).map(({ wallet, addr }) => (
+      {Object.entries(buddylist).map(([addr, wallet]) => (
         <label style={{ display: 'block' }} key={addr}>
           <Group>
             <input type="checkbox" name={addr} />

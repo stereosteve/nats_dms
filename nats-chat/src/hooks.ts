@@ -1,7 +1,6 @@
 import { base58, base64 } from '@scure/base'
 import { useState, useEffect, useMemo } from 'react'
 import { ChantCodec } from './codec'
-import * as secp from '@noble/secp256k1'
 import {
   connect,
   consumerOpts,
@@ -17,7 +16,7 @@ import { Address } from 'micro-eth-signer'
 export const ChatClient = createContainer(useChat)
 export const AuthAPI = createContainer(useAuth)
 
-const SUBJECT = 'derpy.chat11'
+const SUBJECT = 'derpy.chat12'
 
 let natsServers = [
   'ws://localhost:4241',
@@ -67,24 +66,24 @@ export function useChat() {
 
   useEffect(() => {
     if (!nats || !privateKey) return
-    const pub = secp.getPublicKey(privateKey)
-    setAddr(base58.encode(pub))
+    // hack to prevent double js init on login
+    if (js) return
 
-    const codec = new ChantCodec(privateKey, pub)
+    const codec = new ChantCodec(privateKey)
+    setAddr(base58.encode(codec.publicKey))
 
     // create jetstream sub here
-    const js = nats.jetstream()
+    const jetstream = nats.jetstream()
 
     async function consume() {
       const opts = consumerOpts().deliverTo(createInbox())
-      const sub = await js.subscribe(SUBJECT, opts)
+      const sub = await jetstream.subscribe(SUBJECT, opts)
       for await (const m of sub) {
         const got = await codec.decode<ChatMsg>(m.data)
         if (got) {
           const msg = got.data
           // rewrite publicKey and wallet based on "real" values
           // from signature key recover...
-          // todo: do this in codec?
           // todo: separate schema for outgoing and incoming message
           msg.addr = base58.encode(got.publicKey)
           msg.wallet = Address.fromPublicKey(got.publicKey)
@@ -96,7 +95,7 @@ export function useChat() {
 
     consume()
 
-    setJs(js)
+    setJs(jetstream)
     setCodec(codec)
     setReady(true)
   }, [nats, privateKey])
@@ -120,23 +119,15 @@ export function useChat() {
     }
   }
 
-  type AddrAndWallet = {
-    addr: string
-    wallet: string
-  }
-
   // build up a map of addr: {addr, wallet}
   // for all known people from visible messages
   // this is required since we are using ed25519 keys still
   // and it's not easy to get pubkey from eth wallet
   const buddylist = useMemo(() => {
-    const byAddr: Record<string, AddrAndWallet> = {}
+    const byAddr: Record<string, string> = {}
     for (let msg of log) {
       const { addr, wallet } = msg
-      byAddr[msg.addr] = {
-        addr,
-        wallet,
-      }
+      byAddr[msg.addr] = wallet
     }
 
     return byAddr
@@ -151,7 +142,7 @@ export function useChat() {
     ) as Set<string>
     const result: Record<string, string[]> = {}
     for (let chan of chanSet) {
-      result[chan] = chan.split(',').map((addr) => buddylist[addr].wallet)
+      result[chan] = chan.split(',').map((addr) => buddylist[addr])
     }
     return result
   }, [log])

@@ -17,7 +17,7 @@ import { Address } from 'micro-eth-signer'
 export const ChatClient = createContainer(useChat)
 export const AuthAPI = createContainer(useAuth)
 
-const SUBJECT = 'derpy.chat10'
+const SUBJECT = 'derpy.chat11'
 
 let natsServers = [
   'ws://localhost:4241',

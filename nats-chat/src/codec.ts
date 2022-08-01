@@ -1,4 +1,3 @@
-import * as P from 'micro-packed'
 import * as secp from '@noble/secp256k1'
 import * as aes from 'micro-aes-gcm'
 import * as msgpack from '@msgpack/msgpack'
@@ -8,17 +7,11 @@ type EncodeOpts = {
   symKey?: Uint8Array
 }
 
-const SignedPayload = P.struct({
-  bytes: P.bytes(P.U32BE),
-  publicKey: P.bytes(32),
-  signature: P.bytes(64),
-})
-
-const AsymEncrypted = P.struct({
-  magic: P.magic(P.U8, 123),
-  ephemPublicKey: P.bytes(32),
-  ciphertext: P.bytes(P.U32BE),
-})
+const MAGIC = {
+  signed: 11,
+  asym: 12,
+  sym: 13,
+}
 
 export class ChantCodec {
   publicKey: Uint8Array
@@ -41,30 +34,42 @@ export class ChantCodec {
     if (opts?.encPublicKey) {
       return this.encryptAsym(signed, opts.encPublicKey)
     } else if (opts?.symKey) {
-      return aes.encrypt(opts.symKey, signed)
+      return this.encryptSym(signed, opts.symKey)
     } else {
       return signed
     }
   }
 
-  async decode<T>(bytes: Uint8Array) {
-    // attempt to decrypt using any keys
-    // a magic prefix could be used to make this cheaper
-    let signed = bytes
-    for (let key of this.keys) {
-      try {
-        signed = await this.decryptAsym(bytes, key)
-        break
-      } catch (e) {}
+  async decode<T>(
+    bytes: Uint8Array
+  ): Promise<{ data: T; publicKey: Uint8Array } | undefined> {
+    let [magic, ...rest] = msgpack.decode(bytes) as any[]
 
-      try {
-        signed = await aes.decrypt(key, bytes)
+    // attempt to decrypt
+    // maybe separate asym / sym keys?
+    switch (magic) {
+      case MAGIC.asym:
+        for (let key of this.keys) {
+          try {
+            const clear = await this.decryptAsym(rest, key)
+            return this.decode(clear)
+          } catch (e) {}
+        }
         break
-      } catch (e) {}
+      case MAGIC.sym:
+        for (let key of this.keys) {
+          try {
+            const clear = await this.decryptSym(rest, key)
+            return this.decode(clear)
+          } catch (e) {}
+        }
+        break
+      case MAGIC.signed:
+        break
     }
 
     try {
-      const { bytes, publicKey, valid } = await this.unsign(signed)
+      const { bytes, publicKey, valid } = await this.unsign(rest)
       if (!valid) {
         console.log('invalid signature')
         return
@@ -83,14 +88,18 @@ export class ChantCodec {
       recovered: true,
       extraEntropy: true,
     })
-    const signed = msgpack.encode([bytes, messageHash, signature, recovery])
+    const signed = msgpack.encode([
+      MAGIC.signed,
+      bytes,
+      messageHash,
+      signature,
+      recovery,
+    ])
     return signed
   }
 
-  private async unsign(signedBytes: Uint8Array) {
-    const [bytes, messageHash, signature, recovery] = msgpack.decode(
-      signedBytes
-    ) as Uint8Array[]
+  private async unsign(blobs: Uint8Array[]) {
+    const [bytes, messageHash, signature, recovery] = blobs
 
     const publicKey = secp.recoverPublicKey(
       messageHash,
@@ -110,18 +119,27 @@ export class ChantCodec {
     const shared = secp
       .getSharedSecret(ephemPrivateKey, publicKey, true)
       .slice(0, 32)
-    console.log(shared)
     const ciphertext = await aes.encrypt(shared, bytes)
-    return msgpack.encode([ephemPublicKey, ciphertext])
+    return msgpack.encode([MAGIC.asym, ephemPublicKey, ciphertext])
   }
 
-  private async decryptAsym(bytes: Uint8Array, privateKey: Uint8Array) {
-    const [ephemPublicKey, ciphertext] = msgpack.decode(bytes) as Uint8Array[]
+  private async decryptAsym(blobs: Uint8Array[], privateKey: Uint8Array) {
+    const [ephemPublicKey, ciphertext] = blobs
     // TODO: slice is a bit sus
     const shared = secp
       .getSharedSecret(privateKey, ephemPublicKey, true)
       .slice(0, 32) // len: 32
     const clear = await aes.decrypt(shared, ciphertext)
     return clear
+  }
+
+  private async encryptSym(bytes: Uint8Array, shared: Uint8Array) {
+    const ciphertext = await aes.encrypt(shared, bytes)
+    return msgpack.encode([MAGIC.sym, ciphertext])
+  }
+
+  private async decryptSym(blobs: Uint8Array[], shared: Uint8Array) {
+    const [bytes] = blobs
+    return aes.decrypt(shared, bytes)
   }
 }

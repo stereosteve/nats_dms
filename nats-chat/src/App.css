@@ -1,4 +1,19 @@
-#root {
-  margin: 0 auto;
-  padding: 2rem;
+
+nav a {
+  display: block;
+  padding: 10px 15px;
+  border-radius: 10px;
+  white-space: nowrap;
+  text-decoration: none;
+  color: #333;
+  font-weight: bold;
+}
+nav a.active {
+  background: aliceblue;
+}
+nav a span {
+  background: aliceblue;
+  border-radius: 3px;
+  padding: 3px;
+  margin: 3px;
 }

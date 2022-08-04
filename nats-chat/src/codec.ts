@@ -88,18 +88,13 @@ export class ChantCodec {
       recovered: true,
       extraEntropy: true,
     })
-    const signed = msgpack.encode([
-      MAGIC.signed,
-      bytes,
-      messageHash,
-      signature,
-      recovery,
-    ])
+    const signed = msgpack.encode([MAGIC.signed, bytes, signature, recovery])
     return signed
   }
 
   private async unsign(blobs: Uint8Array[]) {
-    const [bytes, messageHash, signature, recovery] = blobs
+    const [bytes, signature, recovery] = blobs
+    const messageHash = await secp.utils.sha256(bytes)
 
     const publicKey = secp.recoverPublicKey(
       messageHash,
@@ -107,30 +102,28 @@ export class ChantCodec {
       recovery as any
     )
     const valid = secp.verify(signature, messageHash, publicKey)
-
-    // const valid = await ed.verify(signature, bytes, publicKey)
     return { bytes, publicKey, signature, valid }
   }
 
   private async encryptAsym(bytes: Uint8Array, publicKey: Uint8Array) {
     const ephemPrivateKey = secp.utils.randomPrivateKey()
     const ephemPublicKey = secp.getPublicKey(ephemPrivateKey)
-    // TODO: slice is a bit sus
-    const shared = secp
-      .getSharedSecret(ephemPrivateKey, publicKey, true)
-      .slice(0, 32)
+    const shared = this.getSharedSecret(ephemPrivateKey, publicKey)
     const ciphertext = await aes.encrypt(shared, bytes)
     return msgpack.encode([MAGIC.asym, ephemPublicKey, ciphertext])
   }
 
   private async decryptAsym(blobs: Uint8Array[], privateKey: Uint8Array) {
     const [ephemPublicKey, ciphertext] = blobs
-    // TODO: slice is a bit sus
-    const shared = secp
-      .getSharedSecret(privateKey, ephemPublicKey, true)
-      .slice(0, 32) // len: 32
+    const shared = this.getSharedSecret(privateKey, ephemPublicKey)
     const clear = await aes.decrypt(shared, ciphertext)
     return clear
+  }
+
+  private getSharedSecret(privateKey: Uint8Array, publicKey: Uint8Array) {
+    let shared = secp.getSharedSecret(privateKey, publicKey, true)
+    shared = shared.slice(shared.length - 32)
+    return shared
   }
 
   private async encryptSym(bytes: Uint8Array, shared: Uint8Array) {

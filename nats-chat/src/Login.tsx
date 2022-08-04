@@ -47,17 +47,10 @@ export function AuthenticationTitle() {
           fontWeight: 900,
         })}
       >
-        Welcome back!
+        Audius Chat
       </Title>
       <Text color="dimmed" size="sm" align="center" mt={5}>
-        Do not have an account yet?{' '}
-        <Anchor<'a'>
-          href="#"
-          size="sm"
-          onClick={(event) => event.preventDefault()}
-        >
-          Create account
-        </Anchor>
+        Log in with Audius username + password
       </Text>
 
       <Paper withBorder shadow="md" p={30} mt={30} radius="md">

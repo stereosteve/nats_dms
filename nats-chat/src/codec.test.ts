@@ -12,7 +12,7 @@ test('codec', async () => {
     message: 'I like dirt',
   }
 
-  const chantCodec = new ChantCodec(myPrivate, myPublic)
+  const chantCodec = new ChantCodec(myPrivate)
 
   // no options signs message
   {
@@ -27,7 +27,7 @@ test('codec', async () => {
 
   const friendPrivate = secp.utils.randomPrivateKey()
   const friendPublic = secp.getPublicKey(friendPrivate)
-  const friendChantProto = new ChantCodec(friendPrivate, friendPublic)
+  const friendChantProto = new ChantCodec(friendPrivate)
 
   // shared secret
   {

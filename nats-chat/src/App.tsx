@@ -1,13 +1,17 @@
 import {
   AppShell,
   Avatar,
+  AvatarProps,
+  Button,
   Group,
   Header,
   Input,
+  Modal,
   Navbar,
   Text,
+  Tooltip,
 } from '@mantine/core'
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BrowserRouter,
   Routes,
@@ -36,7 +40,7 @@ export function Demo() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route path="/" element={<Room />} />
-          <Route path="/dm" element={<NewRoom />} />
+          <Route path="/new_chat" element={<NewRoom />} />
           <Route path="/dm/:chan" element={<Room />} />
           <Route path="/who" element={<UserSearch />} />
           <Route path="/track" element={<TrackSearch />} />
@@ -55,38 +59,36 @@ function Layout() {
   if (!wallet || !user) return <AuthenticationTitle />
 
   return (
-    <AppShell
-      padding="md"
-      navbar={
-        <Navbar width={{ base: 200 }} height={500} p="xs">
-          <Navbar.Section grow className="leftnav">
-            <NavLink to="/">Lobby</NavLink>
-            {Object.entries(roomlist).map(([path, wallets]) => (
-              <NavLink key={path} to={`/dm/${path}`}>
-                <Group>
-                  {wallets.map((w) => (
-                    <UserFace key={w} wallet={w} />
-                  ))}
-                </Group>
-              </NavLink>
-            ))}
-            <NavLink to="/dm">+ New Chat</NavLink>
-          </Navbar.Section>
+    <div style={{ display: 'flex' }}>
+      <Navbar width={{ base: 200 }} p="xs">
+        <Navbar.Section grow className="leftnav">
+          <NavLink to="/">Lobby</NavLink>
+          {Object.entries(roomlist).map(([path, wallets]) => (
+            <NavLink key={path} to={`/dm/${path}`}>
+              <Avatar.Group spacing="xs">
+                {wallets.map((w) => (
+                  <UserFace key={w} wallet={w} radius="xl" />
+                ))}
+              </Avatar.Group>
+            </NavLink>
+          ))}
+          <NavLink to="/new_chat">+ New Chat</NavLink>
+        </Navbar.Section>
 
-          <Navbar.Section>
+        <Navbar.Section>
+          <Group>
             <UserFace wallet={wallet} />
-            <button onClick={clearPrivateKey}>logout</button>
-          </Navbar.Section>
-        </Navbar>
-      }
-      header={
-        <Header height={50} p="xs">
-          <Text>Audius Chat</Text>
-        </Header>
-      }
-    >
-      <Outlet />
-    </AppShell>
+            <Button variant="subtle" onClick={clearPrivateKey}>
+              logout
+            </Button>
+          </Group>
+        </Navbar.Section>
+      </Navbar>
+
+      <div style={{ flexGrow: 1 }}>
+        <Outlet />
+      </div>
+    </div>
   )
 }
 
@@ -115,27 +117,37 @@ function Room() {
   }
 
   return (
-    <div>
-      {/* <div style={{ padding: 10, background: 'aliceblue' }}>
-        {members && members.map((m) => <WallyWall key={m} wallet={m} />)}
-        <h2>{!members && 'Lobby'}</h2>
-      </div> */}
-
-      <div>
+    <div
+      style={{
+        height: '100vh',
+        // width: '100vw',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <div style={{ flexGrow: 1, overflow: 'auto', padding: 5 }}>
+        {visibleLog.length == 0 ? (
+          <h3>Say something to get it started!</h3>
+        ) : null}
         {visibleLog.map((msg, idx) => (
           <ChatRow msg={msg} key={idx} />
         ))}
+        <AlwaysScrollToBottom messages={log} />
       </div>
 
-      <form onSubmit={sendMessage} style={{ display: 'flex' }}>
-        <Input
-          type="text"
-          value={msg}
-          onChange={(e: any) => setMsg(e.target.value)}
-          placeholder="Say something..."
-          required
-        />
-        <button>Send</button>
+      <form onSubmit={sendMessage}>
+        <Group p={12} spacing="xs">
+          <Input
+            style={{ flexGrow: 1 }}
+            type="text"
+            value={msg}
+            onChange={(e: any) => setMsg(e.target.value)}
+            placeholder="Say something..."
+            required
+          />
+          <Button type="submit">say</Button>
+        </Group>
       </form>
       {/* <div style={{ fontSize: 10, color: '#555' }}>{wallet}</div> */}
     </div>
@@ -163,30 +175,50 @@ function NewRoom() {
     <form onSubmit={handleSubmit}>
       {Object.entries(buddylist).map(([addr, wallet]) => (
         <label style={{ display: 'block' }} key={addr}>
-          <Group>
+          <Group my={10}>
             <input type="checkbox" name={addr} />
             <UserFaceAndName wallet={wallet} />
           </Group>
         </label>
       ))}
       <br />
-      <button>chat</button>
+      <Button type="submit">Chat</Button>
     </form>
   )
 }
 
 // ----
 
+function SpinModal() {
+  const [opened, setOpened] = useState(false)
+
+  return (
+    <>
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title="Introduce yourself!"
+      >
+        {/* Modal content */}
+      </Modal>
+
+      <Group position="center">
+        <Button onClick={() => setOpened(true)}>Open Modal</Button>
+      </Group>
+    </>
+  )
+}
+
 function ChatRow({ msg }: { msg: ChatMsg }) {
   const { user } = useFetchUserByWallet(msg.wallet)
   if (!user) return null
   return (
     <div>
-      <Group style={{ alignItems: 'flex-start', marginBottom: 20 }}>
+      <Group style={{ alignItems: 'flex-start', margin: 10 }}>
         <Avatar src={user.avatar_url} />
 
         <div style={{ flex: 1 }}>
-          <Text size="sm" weight={500} title={user.handle}>
+          <Text size="xs" weight={700} title={user.handle}>
             {user.name}
 
             <small style={{ color: '#ccc', marginLeft: 10 }}>
@@ -201,10 +233,14 @@ function ChatRow({ msg }: { msg: ChatMsg }) {
   )
 }
 
-function UserFace({ wallet }: { wallet: string }) {
+function UserFace({ wallet, ...rest }: { wallet: string } & AvatarProps) {
   const { user } = useFetchUserByWallet(wallet)
   if (!user) return null
-  return <Avatar src={user.avatar_url} />
+  return (
+    <Tooltip label={user.name} withArrow>
+      <Avatar src={user.avatar_url} {...rest} />
+    </Tooltip>
+  )
 }
 
 function UserFaceAndName({ wallet }: { wallet: string }) {
@@ -218,6 +254,14 @@ function UserFaceAndName({ wallet }: { wallet: string }) {
   )
 }
 
-/*
-https://creatornode2.audius.co/ipfs/QmUSEXrrgm8vZf2Y3VMR15vtn5SPdZAYzzFT1aJNqmCeNH/150x150.jpg
-*/
+const AlwaysScrollToBottom = (props: { messages: any[] }) => {
+  const elementRef = useRef<HTMLDivElement>()
+
+  useEffect(() => {
+    // @ts-ignore
+    elementRef.current.scrollIntoView()
+  })
+
+  // @ts-ignore
+  return <div ref={elementRef} />
+}

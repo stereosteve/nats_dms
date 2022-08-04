@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "demo": "vite-node scratch/codecExample.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.9.3",
@@ -25,6 +26,7 @@
     "micro-packed": "^0.2.0",
     "nats": "^2.7.1",
     "nats.ws": "^1.8.1",
+    "nkeys.js": "^1.0.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.3.0",

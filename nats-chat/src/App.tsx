@@ -1,16 +1,29 @@
 import {
+  ActionIcon,
+  Anchor,
   AppShell,
   Avatar,
   AvatarProps,
   Button,
+  Container,
   Group,
   Header,
   Input,
   Modal,
   Navbar,
+  Progress,
   Text,
   Tooltip,
 } from '@mantine/core'
+import { useFocusTrap } from '@mantine/hooks'
+import {
+  IconBold,
+  IconBolt,
+  IconHammer,
+  IconHeadphones,
+  IconHeadphonesOff,
+  IconPlayerPlay,
+} from '@tabler/icons'
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BrowserRouter,
@@ -22,14 +35,14 @@ import {
   Link,
   NavLink,
 } from 'react-router-dom'
+import { useAudio } from 'react-use'
 import './App.css'
 import {
-  AuthAPI,
-  ChatClient,
-  ChatMsg,
-  useChat,
+  useFetchTrackById,
+  AudiusTrack,
   useFetchUserByWallet,
-} from './hooks'
+} from './audius_api'
+import { AuthAPI, ChatClient, ChatMsg, useChat } from './hooks'
 import { AuthenticationTitle } from './Login'
 import { TrackSearch } from './TrackSearch'
 import { UserSearch } from './UserSearch'
@@ -43,7 +56,6 @@ export function Demo() {
           <Route path="/new_chat" element={<NewRoom />} />
           <Route path="/dm/:chan" element={<Room />} />
           <Route path="/who" element={<UserSearch />} />
-          <Route path="/track" element={<TrackSearch />} />
           <Route path="/login" element={<AuthenticationTitle />} />
         </Route>
       </Routes>
@@ -53,7 +65,7 @@ export function Demo() {
 
 function Layout() {
   const { loading, user, wallet, clearPrivateKey } = AuthAPI.useContainer()
-  const { roomlist, ready } = ChatClient.useContainer()
+  const { roomlist } = ChatClient.useContainer()
 
   if (loading) return <div>loading</div>
   if (!wallet || !user) return <AuthenticationTitle />
@@ -92,17 +104,131 @@ function Layout() {
   )
 }
 
+function NowPlaying({
+  mostRecentSpin,
+}: {
+  mostRecentSpin: ChatMsg | undefined
+}) {
+  // bunch of hacky stuff in here to do "synced playback"
+  // there's got to be a better way!  probably pulling out to a global provider type of thing
+  const trackId = mostRecentSpin?.trackId
+  const [muted, setMuted] = useState(false)
+  const [tracksOver, setTracksOver] = useState(false)
+  const { track } = useFetchTrackById(trackId)
+  const [audio, state, controls, ref] = useAudio({
+    src: track?.mp3 || '',
+    preload: 'auto',
+  })
+
+  // compoute position in track
+  function syncup() {
+    if (!mostRecentSpin || !track || !ref) return
+    const msOffset = new Date().getTime() - mostRecentSpin.timestamp.getTime()
+    const pos = msOffset / 1000
+    const drift = Math.abs(state.time - pos)
+
+    if (msOffset < 0) {
+      console.log('song is in future', msOffset)
+      controls.seek(0)
+      // controls.pause()
+      setTimeout(syncup, Math.abs(msOffset))
+      return
+    }
+
+    if (pos > track.duration) {
+      console.log('tracks over')
+      setTracksOver(true)
+      return
+    }
+
+    setTracksOver(false)
+    console.log('seek from', state.time, `to`, pos, 'drift', drift)
+    controls.seek(pos)
+    controls.play()
+  }
+
+  function printDebug() {
+    if (!mostRecentSpin || !track || !ref) return
+    const msOffset = new Date().getTime() - mostRecentSpin.timestamp.getTime()
+    const pos = msOffset / 1000
+    const drift = Math.abs(state.time - pos)
+    console.log('seek from', state.time, `to`, pos, 'drift', drift)
+    console.log(state)
+  }
+
+  useEffect(() => {
+    if (!mostRecentSpin || !track || !ref) return
+    setTimeout(syncup, 300)
+    syncup()
+  }, [mostRecentSpin, track, ref])
+
+  function toggleMute() {
+    muted ? controls.unmute() : controls.mute()
+    setMuted(!muted)
+  }
+
+  if (!mostRecentSpin || !track || tracksOver) return audio
+  return (
+    <div
+      style={{
+        backgroundImage: 'url(' + track.user.cover_photo['2000x'] + ')',
+        backgroundSize: 'cover',
+      }}
+    >
+      {audio}
+      <Group p={8} style={{ background: 'rgba(255,255,255,0.85)' }}>
+        <Avatar src={track.artwork['150x150']} />
+
+        <div style={{ flexGrow: 1 }}>
+          <Anchor href={`https://audius.co${track.permalink}`} target="_blank">
+            <b>{track.title}</b> by {track.user.name}
+          </Anchor>
+          <Group>
+            <Progress
+              value={(state.time / state.duration) * 100}
+              style={{ flexGrow: 1 }}
+            />
+            <ActionIcon variant="subtle" onClick={toggleMute}>
+              {muted ? <IconHeadphones /> : <IconHeadphonesOff />}
+            </ActionIcon>
+            <ActionIcon
+              variant="subtle"
+              onClick={syncup}
+              title="start (or fix) synced playback"
+            >
+              <IconBolt />
+            </ActionIcon>
+            <ActionIcon
+              variant="subtle"
+              onClick={printDebug}
+              title="print debug"
+            >
+              <IconHammer />
+            </ActionIcon>
+          </Group>
+        </div>
+      </Group>
+    </div>
+  )
+}
+
 function Room() {
   // if we're in a channel
   const { chan } = useParams()
-  const { log, sendit, roomlist, ready } = ChatClient.useContainer()
+  const { log, sendit, ready } = ChatClient.useContainer()
   const [msg, setMsg] = useState('')
-  const members = chan ? roomlist[chan] : undefined
 
   const visibleLog = useMemo(
     () => log.filter((msg) => msg.chan == chan),
     [log, chan]
   )
+
+  const mostRecentSpin = useMemo(() => {
+    return visibleLog
+      .slice()
+      .reverse()
+      .find((m) => m.trackId)
+  }, [visibleLog])
 
   if (!ready) return <div>loading</div>
 
@@ -126,14 +252,17 @@ function Room() {
         flexDirection: 'column',
       }}
     >
+      <div>
+        <NowPlaying mostRecentSpin={mostRecentSpin} />
+      </div>
+
       <div style={{ flexGrow: 1, overflow: 'auto', padding: 5 }}>
         {visibleLog.length == 0 ? (
-          <h3>Say something to get it started!</h3>
+          <h4 style={{ color: '#555' }}>Say something to get it started!</h4>
         ) : null}
         {visibleLog.map((msg, idx) => (
-          <ChatRow msg={msg} key={idx} />
+          <ChatRow msg={msg} key={idx} isLast={idx == visibleLog.length - 1} />
         ))}
-        <AlwaysScrollToBottom messages={log} />
       </div>
 
       <form onSubmit={sendMessage}>
@@ -146,7 +275,8 @@ function Room() {
             placeholder="Say something..."
             required
           />
-          <Button type="submit">say</Button>
+          <Button type="submit">Say</Button>
+          <SpinModal />
         </Group>
       </form>
       {/* <div style={{ fontSize: 10, color: '#555' }}>{wallet}</div> */}
@@ -190,30 +320,52 @@ function NewRoom() {
 // ----
 
 function SpinModal() {
+  const { chan } = useParams()
   const [opened, setOpened] = useState(false)
+  const { sendit } = ChatClient.useContainer()
+
+  function onTrack(track: AudiusTrack) {
+    setOpened(false)
+    sendit({
+      trackId: track.id,
+      chan,
+    })
+  }
 
   return (
     <>
       <Modal
         opened={opened}
         onClose={() => setOpened(false)}
-        title="Introduce yourself!"
+        title="Select a song..."
+        overlayOpacity={0.25}
+        size="xl"
       >
-        {/* Modal content */}
+        <TrackSearch onSelect={onTrack} />
       </Modal>
 
       <Group position="center">
-        <Button onClick={() => setOpened(true)}>Open Modal</Button>
+        <Button onClick={() => setOpened(true)}>Play Song</Button>
       </Group>
     </>
   )
 }
 
-function ChatRow({ msg }: { msg: ChatMsg }) {
+function ChatRow({ msg, isLast }: { msg: ChatMsg; isLast: boolean }) {
+  const divRef = useRef<HTMLDivElement>(null)
   const { user } = useFetchUserByWallet(msg.wallet)
+  const { track } = useFetchTrackById(msg.trackId)
+
+  useEffect(() => {
+    if (isLast && divRef.current) {
+      divRef.current.scrollIntoView()
+    }
+  }, [user, track, isLast])
+
   if (!user) return null
+
   return (
-    <div>
+    <div ref={divRef}>
       <Group style={{ alignItems: 'flex-start', margin: 10 }}>
         <Avatar src={user.avatar_url} />
 
@@ -227,6 +379,24 @@ function ChatRow({ msg }: { msg: ChatMsg }) {
           </Text>
 
           <Text>{msg.msg}</Text>
+
+          {track && <TrackRow track={track} />}
+        </div>
+      </Group>
+    </div>
+  )
+}
+
+function TrackRow({ track }: { track: AudiusTrack }) {
+  if (!track) return null
+  return (
+    <div>
+      <Group spacing="xs">
+        <Avatar src={track.artwork['150x150']} />
+        <div style={{ fontSize: '80%', lineHeight: 1.1 }}>
+          <b>{track.title}</b>
+          <br />
+          {track.user.name}
         </div>
       </Group>
     </div>
@@ -252,16 +422,4 @@ function UserFaceAndName({ wallet }: { wallet: string }) {
       <Text>{user.name}</Text>
     </Group>
   )
-}
-
-const AlwaysScrollToBottom = (props: { messages: any[] }) => {
-  const elementRef = useRef<HTMLDivElement>()
-
-  useEffect(() => {
-    // @ts-ignore
-    elementRef.current.scrollIntoView()
-  })
-
-  // @ts-ignore
-  return <div ref={elementRef} />
 }

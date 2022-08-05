@@ -12,6 +12,7 @@ import { createContainer } from 'unstated-next'
 import { useLocalStorage } from 'react-use'
 import useSWR, { Key } from 'swr'
 import { Address } from 'micro-eth-signer'
+import { useFetchUserByWallet } from './audius_api'
 
 export const ChatClient = createContainer(useChat)
 export const AuthAPI = createContainer(useAuth)
@@ -38,6 +39,7 @@ export type ChatMsg = {
   timestamp: Date
   msg: string
   chan?: string
+  trackId?: string
 
   wallet: string
   addr: string
@@ -78,6 +80,9 @@ export function useChat() {
     async function consume() {
       const opts = consumerOpts().deliverTo(createInbox())
       const sub = await jetstream.subscribe(SUBJECT, opts)
+      // spools up messages from nats and calls setLog when pending == 0
+      // to prevent history from loading all one at a time
+      const spool = []
       for await (const m of sub) {
         const got = await codec.decode<ChatMsg>(m.data)
         if (got) {
@@ -87,7 +92,10 @@ export function useChat() {
           // todo: separate schema for outgoing and incoming message
           msg.addr = base58.encode(got.publicKey)
           msg.wallet = Address.fromPublicKey(got.publicKey)
-          setLog((old) => [...old, msg])
+          spool.push(msg)
+          if (m.info.pending == 0) {
+            setLog([...spool])
+          }
         }
         // m.ack()
       }
@@ -104,6 +112,10 @@ export function useChat() {
     if (!wallet) throw new Error(`cant sendit without wallet`)
 
     msg.timestamp = new Date()
+
+    // hack for "spin" message...
+    // set timestamp in future to give all peers a chance to receive message and buffer audio
+    if (msg.trackId) msg.timestamp.setSeconds(msg.timestamp.getSeconds() + 1)
 
     if (msg.chan) {
       const pubkeys = msg.chan.split(',').map((b) => base58.decode(b))
@@ -151,40 +163,6 @@ export function useChat() {
 }
 
 ///// --------------
-
-export type AudiusUser = {
-  handle: string
-  name: string
-  creator_node_endpoint: string
-  profile_picture_sizes: string
-  avatar_url: string
-
-  profile_picture?: {
-    '150x150': string
-  }
-}
-
-export function useFetchUserByWallet(wallet: Key) {
-  const { data: user } = useSWR<AudiusUser>(wallet, (wallet) =>
-    fetch(`https://discoveryprovider3.audius.co/users/account?wallet=${wallet}`)
-      .then((res) => res.json())
-      .then((r) => {
-        const user = r.data as AudiusUser
-        if (user.profile_picture_sizes) {
-          user.avatar_url = user.creator_node_endpoint
-            .split(',')
-            .map(
-              (h: string) =>
-                `${h}/ipfs/${user.profile_picture_sizes}/150x150.jpg`
-            )[0]
-        }
-
-        return user
-      })
-  )
-
-  return { user }
-}
 
 function useAuth() {
   const [privateKey, setPrivateKey, clearPrivateKey] = useLocalStorage(

@@ -35,6 +35,7 @@ export function AuthenticationTitle() {
       setPrivateKey(hdkey.privateKey!)
     } catch (e) {
       console.log('login failed', e)
+      alert('login failed, check creds or console?')
     }
   })
 

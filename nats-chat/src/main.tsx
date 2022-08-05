@@ -1,6 +1,7 @@
 import { MantineProvider } from '@mantine/core'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { SWRConfig } from 'swr'
 import { Demo } from './App'
 import { AuthAPI, ChatClient } from './hooks'
 // import './index.css'
@@ -8,9 +9,19 @@ import { AuthAPI, ChatClient } from './hooks'
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <AuthAPI.Provider>
     <ChatClient.Provider>
-      <MantineProvider withGlobalStyles withNormalizeCSS>
-        <Demo />
-      </MantineProvider>
+      <SWRConfig
+        value={{
+          revalidateOnFocus: false,
+        }}
+      >
+        <MantineProvider
+          withGlobalStyles
+          withNormalizeCSS
+          theme={{ colorScheme: 'light' }}
+        >
+          <Demo />
+        </MantineProvider>
+      </SWRConfig>
     </ChatClient.Provider>
   </AuthAPI.Provider>
 )

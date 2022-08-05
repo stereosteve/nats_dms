@@ -8,7 +8,7 @@ import {
   Text,
 } from '@mantine/core'
 import { forwardRef, useRef, useState } from 'react'
-import { AudiusUser } from './hooks'
+import { AudiusUser } from './audius_api'
 
 const UserItem = forwardRef<HTMLDivElement, AudiusUser>(
   ({ name, handle, profile_picture, ...others }: AudiusUser, ref) => (
